@@ -9,13 +9,13 @@ project(super)
 add_subdirectory(drivers/can)
 
 # 添加外部库目录，指定二进制目录
-add_subdirectory(../CommonLibrary/motorcontrollib ${CMAKE_BINARY_DIR}/motorcontrollib)
+add_subdirectory(../CommonLibrary/motorlib ${CMAKE_BINARY_DIR}/motorlib)
 
 # 添加其他库
-add_library(motorcontrollib INTERFACE)
+add_library(motorlib INTERFACE)
 
-target_include_directories(motorcontrollib INTERFACE
-    ../CommonLibrary/motorcontrollib
+target_include_directories(motorlib INTERFACE
+    ../CommonLibrary/motorlib
 )
 
 add_library(ProtocolV4 INTERFACE)
@@ -39,11 +39,12 @@ target_sources(algorithmlib INTERFACE
     ../CommonLibrary/algorithmlib/pid.c
     ../CommonLibrary/algorithmlib/filter.c
     ../CommonLibrary/algorithmlib/s_posi_planning.c
+    ../CommonLibrary/algorithmlib/s_trajectory_planning.c
 )
 
 # 包含目录
 zephyr_include_directories(
-    ../CommonLibrary/motorcontrollib/include
+    ../CommonLibrary/motorlib/include
     ../CommonLibrary/ProtocolV4/uavcan/.cFolder
     ../CommonLibrary/ProtocolV4/uavcan/libcanard
     ../CommonLibrary
@@ -57,7 +58,7 @@ target_sources(app PRIVATE
 
 # 链接库
 target_link_libraries(app PRIVATE
-    motorcontrollib
+    motorlib
     ProtocolV4
     canard
     statemachine

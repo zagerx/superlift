@@ -190,7 +190,7 @@ void super_elevator_task(void* obj)
                                 motor_set_state(motor,MOTOR_CMD_SET_ENABLE);
                             }
                             motor_set_state(motor,MOTOR_CMD_SET_START);
-                            motor_set_target(motor,150.0f);
+                            motor_set_target(motor,2.5f);
                             elevator_fsm->chState = ELEVATOR_FINDZERO;                                             
                         }
                     }else{
