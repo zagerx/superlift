@@ -30,6 +30,8 @@
  #define ENCODER_VCC DT_NODELABEL(encoder_vcc)
  #define W_DOG DT_NODELABEL(wdog)
  #define P_SWITCH DT_NODELABEL(proximity_switch)
+ #define STOP_BUTTON DT_NODELABEL(stopbutton)
+
  /* GPIO device specification */
  const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
  
@@ -101,7 +103,14 @@
      } else {
         LOG_INF("Proximity switch configured");
      }
-          
+
+     const struct gpio_dt_spec stop = GPIO_DT_SPEC_GET(STOP_BUTTON, gpios);
+     ret = gpio_pin_configure_dt(&stop, GPIO_INPUT);
+     if (ret < 0) {
+        LOG_ERR("Failed to configure stop button (err %d)", ret);
+     } else {
+        LOG_INF("stop button configured");
+     }
  #endif
  
      /* Initial delay for hardware stabilization */
@@ -155,22 +164,33 @@ enum{
     ELEVATOR_ISZERO,
     ELEVATOR_ISEND,
     ELEVATOR_END,
+    ELEVATOR_STOP,//急停状态
 };
 void super_elevator_task(void* obj)
 {
 
     fsm_cb_t* elevator_fsm = &elevator_handle;
     const struct gpio_dt_spec prx_switch = GPIO_DT_SPEC_GET(P_SWITCH, gpios);
+    const struct gpio_dt_spec stop_bt = GPIO_DT_SPEC_GET(STOP_BUTTON, gpios);
 
     const struct device *motor = (const struct device*)obj;
     struct motor_data *data;
     const struct motor_config *cfg = motor->config;
     data = motor->data;
+    const struct gpio_dt_spec mot12_brk = GPIO_DT_SPEC_GET(MOT12_BRK_PIN_NODE, gpios);
 
     /* Run state machine */
     DISPATCH_FSM(cfg->fsm);
     int switch_state;
     elevator_fsm->p1 = (void *)motor;
+    int8_t stop_state;
+    stop_state = gpio_pin_get_dt(&stop_bt);
+    if(stop_state == 1 && elevator_fsm->chState != ELEVATOR_STOP)
+    {
+        motor_set_state(motor,MOTOR_CMD_SET_DISABLE);
+        gpio_pin_set_dt(&mot12_brk,0);        
+        elevator_fsm->chState = ELEVATOR_STOP;
+    }
     switch (elevator_fsm->chState) {
         case ENTER:
         case ELEVATOR_INIT:
@@ -194,7 +214,11 @@ void super_elevator_task(void* obj)
                             elevator_fsm->chState = ELEVATOR_FINDZERO;                                             
                         }
                     }else{
-                        elevator_fsm->chState = ELEVATOR_FINDZERO;
+                        if(motor_get_mode(motor) != MOTOR_MODE_POSI)
+                        {
+                            motor_set_mode(motor, MOTOR_MODE_POSI);
+                        }
+                        elevator_fsm->chState = ELEVATOR_ZERO;
                     }
                     LOG_DBG("Proximity switch state: %d", switch_state);
                 }
@@ -207,7 +231,7 @@ void super_elevator_task(void* obj)
                 if(switch_state == 1)//找到零点
                 {
                     motor_set_target(motor,0.0f);
-                    motor_set_mode(motor, MOTOR_MODE_POSI);
+                    motor_set_mode(motor, MOTOR_MODE_POSI);                   
                     elevator_fsm->chState = ELEVATOR_ZERO;
                 }
             }
@@ -218,13 +242,14 @@ void super_elevator_task(void* obj)
                 {
                     break;
                 }
-
+                gpio_pin_set_dt(&mot12_brk,0);
+                motor_set_state(motor,MOTOR_CMD_SET_DISABLE);                 
                 //添加对顶升命令的响应
                 if(conctrl_cmd != 1)
                 {
                     break;
                 }
-
+                gpio_pin_set_dt(&mot12_brk,1);
                 if(motor_get_state(motor) != MOTOR_STATE_READY)
                 {
                     float posi = -RISING_DIS;
@@ -248,12 +273,13 @@ void super_elevator_task(void* obj)
                         break;
                     }
 
-                    if(conut>3100)
+                    if(conut>4500)
                     {
                         conut = 0;
+                        gpio_pin_set_dt(&mot12_brk,0);
+                        motor_set_state(motor,MOTOR_CMD_SET_DISABLE);                        
                         elevator_fsm->chState = ELEVATOR_END;    
                     }
-                    // motor_set_state(motor,MOTOR_CMD_SET_DISABLE);
                 }
             }
             break;
@@ -265,6 +291,7 @@ void super_elevator_task(void* obj)
                 {
                     break;
                 }
+                gpio_pin_set_dt(&mot12_brk,1);
                 if(motor_get_state(motor) != MOTOR_STATE_READY)
                 {
                     float posi = RISING_DIS + 50;
@@ -283,9 +310,15 @@ void super_elevator_task(void* obj)
             if(switch_state != 1)
             {
                 break;
-
             }
             elevator_fsm->chState = ELEVATOR_ZERO;
+            break;
+        case ELEVATOR_STOP:
+            if(stop_state == 0)
+            {
+                gpio_pin_set_dt(&mot12_brk,1);
+                elevator_fsm->chState = ELEVATOR_INIT;
+            }
             break;
         case EXIT:
             break;
@@ -317,8 +350,8 @@ int8_t super_elevator_state(void)
         state = 4;
     }else if(elevator_handle.chState == ELEVATOR_ISZERO){
         state = 5;
-    }else{//急停状态，后续补充
-
+    }else if(elevator_handle.chState == ELEVATOR_STOP){//急停状态，后续补充
+        state = 6;
     }
     return state;
 }
