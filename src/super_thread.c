@@ -23,6 +23,7 @@ enum {
 	ELEVATOR_ISEND,
 	ELEVATOR_END,
 	ELEVATOR_STOP,
+	ELEVATOR_MOTOR_FAULT,
 };
 /* Device tree node aliases */
 #define LED0_NODE	   DT_ALIAS(led0)
@@ -58,7 +59,9 @@ static void super_elevator_task(void *obj)
 	    elevator_fsm->chState == ELEVATOR_STOP) {
 		conctrl_cmd = 0;
 	}
-
+	if (motor_get_state(motor) == MOTOR_STATE_FAULT) {
+		elevator_fsm->chState = ELEVATOR_MOTOR_FAULT;
+	}
 	switch (elevator_fsm->chState) {
 	case ENTER:
 	case ELEVATOR_INIT: {
@@ -170,6 +173,9 @@ static void super_elevator_task(void *obj)
 			gpio_pin_set_dt(&mot12_brk, 1);
 			elevator_fsm->chState = ELEVATOR_INIT;
 		}
+		break;
+	case ELEVATOR_MOTOR_FAULT:
+		gpio_pin_set_dt(&mot12_brk, 0);
 		break;
 	case EXIT:
 		break;

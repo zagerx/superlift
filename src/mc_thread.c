@@ -43,13 +43,26 @@ struct motor_thread_data {
  * 2. Starts motor control tasks
  * 3. Maintains watchdog timer
  */
+extern void currsmp_shunt_stm32_get_bus_vol_curr(const struct device *dev, float *bus_vol,
+						 float *bus_curr);
+extern void motor_set_vol(const struct device *motor, float *bus_vol);
+
 static void motor_thread_entry(void *p1, void *p2, void *p3)
 {
 	const struct device *motor0 = DEVICE_DT_GET(DT_NODELABEL(motor0));
 	const struct motor_config *cfg = motor0->config;
-
+	float bus_vol, bus_curr;
 	/* Main control loop */
 	while (1) {
+		static uint8_t count = 0;
+		if (count++ > 10) {
+			count = 0;
+			currsmp_shunt_stm32_get_bus_vol_curr(cfg->currsmp, &bus_vol, &bus_curr);
+			if (bus_vol < 47.0f) {
+				// motor_set_state(motor0, MOTOR_CMD_SET_VOLFAULT);
+			}
+			motor_set_vol(motor0, &bus_vol);
+		}
 		DISPATCH_FSM(cfg->fsm);
 		k_msleep(1);
 	}
