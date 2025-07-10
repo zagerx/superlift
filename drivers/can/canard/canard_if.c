@@ -265,15 +265,23 @@ static void handle_operate_remote_device(CanardRxTransfer *transfer)
 		memcpy(device_name, req.name.elements, req.name.count);
 		memcpy(device_param, req.param.elements, req.param.count);
 
-		LOG_INF("Remote device operation: method=%u, name='%s', param='%s'", req.method,
-			device_name, device_param);
+		// LOG_INF("Remote device operation: method=%u, name='%s', param='%s'", req.method,
+		// 	device_name, device_param);
 		if (!strcmp(device_name, "ieb_motor_lift")) {
 			if (req.method ==
 			    dinosaurs_peripheral_OperateRemoteDevice_Request_1_0_OPEN) {
-				conctrl_cmd = 1;
+				if (!strcmp(device_param, "1")) {
+					// LOG_INF("rising");
+					conctrl_cmd = 1;
+
+				} else if (!strcmp(device_param, "0")) {
+					// LOG_INF("falling");
+					conctrl_cmd = 2;
+
+				} else {
+				}
 			} else if (req.method ==
 				   dinosaurs_peripheral_OperateRemoteDevice_Request_1_0_CLOSE) {
-				conctrl_cmd = 2;
 			} else {
 			}
 		} else if (!strcmp(device_name, "m-brake")) {
