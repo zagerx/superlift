@@ -13,11 +13,13 @@
 
 #include <stdint.h>
 #include <zephyr/kernel.h>
+#include "fault_monitoring_module.h"
 #include "statemachine.h"
 #include "zephyr/device.h"
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/logging/log.h>
 #include <lib/bldcmotor/motor.h>
+#include <fault_monitoring_module.h>
 /* Module logging setup */
 LOG_MODULE_REGISTER(motor_thread, LOG_LEVEL_DBG);
 
@@ -50,12 +52,33 @@ static void motor_thread_entry(void *p1, void *p2, void *p3)
 	const struct device *motor0 = DEVICE_DT_GET(DT_NODELABEL(motor0));
 	const struct motor_config *cfg = motor0->config;
 	float bus_volcurur[2];
+	fmm_init(cfg->fault, 60.0f, 48.0f, 5, 5, NULL);
+	static int16_t fault_fsm = 0;
+	static uint32_t cout_test;
 	/* Main control loop */
 	while (1) {
 		motor_getbus_vol_curr(motor0, &bus_volcurur[0], &bus_volcurur[1]);
-		if (bus_volcurur[0] < 47.0f) {
-		}
 		motor_set_vol(motor0, bus_volcurur);
+
+		fmm_monitoring(cfg->fault, bus_volcurur[0]);
+		switch (fault_fsm) {
+		case 1:
+			if (fmm_readstatus(cfg->fault) == FMM_NORMAL) { // 判断是否恢复
+				fault_fsm = 0;
+				motor_set_state(motor0, MOTOR_CMD_SET_IDLE);
+			}
+			break;
+		case 0: // 判断是否有故障
+			if (fmm_readstatus(cfg->fault) == FMM_FAULT) {
+				fault_fsm = 1;
+				cout_test++;
+				motor_set_state(motor0, MOTOR_CMD_SET_VOLFAULT);
+			}
+			break;
+		default:
+			break;
+		}
+
 		DISPATCH_FSM(cfg->fsm);
 		k_msleep(1);
 	}

@@ -176,6 +176,10 @@ static void super_elevator_task(void *obj)
 		break;
 	case ELEVATOR_MOTOR_FAULT:
 		gpio_pin_set_dt(&mot12_brk, 0);
+		if (motor_get_state(motor) == MOTOR_STATE_IDLE) {
+			gpio_pin_set_dt(&mot12_brk, 1);
+			elevator_fsm->chState = ELEVATOR_INIT;
+		}
 		break;
 	case EXIT:
 		break;
@@ -282,6 +286,12 @@ static void super_thread_entry(void *p1, void *p2, void *p3)
 		gpio_pin_toggle_dt(&w_dog);
 		/* Run motor control tasks */
 		super_elevator_task(NULL);
+
+		// if (motor_get_state(motor) == MOTOR_STATE_FAULT) {
+		// 	gpio_pin_set_dt(&mot12_brk, 0);
+		// } else {
+		// 	gpio_pin_set_dt(&mot12_brk, 1);
+		// }
 		k_msleep(1);
 	}
 }
